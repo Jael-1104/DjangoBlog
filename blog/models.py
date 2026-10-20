@@ -27,17 +27,21 @@ class LinkShowType(models.TextChoices):
 
 
 class BaseModel(models.Model):
+    """所有可缓存/带时间戳内容的抽象基类，统一提供主键与时间字段"""
     id = models.AutoField(primary_key=True)
     creation_time = models.DateTimeField(_('creation time'), default=now)
     last_modify_time = models.DateTimeField(_('modify time'), default=now)
 
     def save(self, *args, **kwargs):
+        # 特殊优化：仅更新浏览量(views)时走 queryset.update()，
+        # 避免触发完整 save() 流程（含 post_save 信号 / 时间戳刷新）
         is_update_views = isinstance(
             self,
             Article) and 'update_fields' in kwargs and kwargs['update_fields'] == ['views']
         if is_update_views:
             Article.objects.filter(pk=self.pk).update(views=self.views)
         else:
+            # 含 slug 字段的模型：依据 title 或 name 自动生成 URL slug
             if 'slug' in self.__dict__:
                 slug = getattr(
                     self, 'title') if 'title' in self.__dict__ else getattr(
@@ -147,16 +151,19 @@ class Article(BaseModel):
         super().save(*args, **kwargs)
 
     def viewed(self):
+        """阅读量 +1，使用 update_fields 触发上面 save() 的轻量更新分支"""
         self.views += 1
         self.save(update_fields=['views'])
 
     def comment_list(self):
+        """获取文章启用的评论列表，带 10 小时缓存（读多写少场景）"""
         cache_key = CacheKey.ARTICLE_COMMENTS.format(article_id=self.id)
         value = cache.get(cache_key)
         if value:
             logger.info(f'Cache HIT: article comments (id={self.id})')
             return value
         else:
+            # 未命中则回源数据库，仅取已审核通过(is_enable)的评论并倒序
             comments = self.comment_set.filter(is_enable=True).order_by('-id')
             cache.set(cache_key, comments, CacheTimeout.HOUR_10)
             logger.info(f'Cache MISS: article comments (id={self.id})')

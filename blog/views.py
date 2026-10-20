@@ -89,6 +89,7 @@ class IndexView(OptimizedArticleQueryMixin, ArticleListView):
 class ArticleDetailView(DetailView):
     '''
     文章详情页面
+    - 负责：加载文章、组织评论分页、计算 SEO、触发插件钩子
     '''
     template_name = 'blog/article_detail.html'
     model = Article
@@ -98,7 +99,8 @@ class ArticleDetailView(DetailView):
     def get_context_data(self, **kwargs):
         comment_form = CommentForm()
 
-        # 优化：直接查询父评论，减少数据库查询
+        # 性能优化：只查父评论(parent_comment=None)，通过 prefetch_related
+        # 一次性预加载子评论及作者，避免 N+1 查询
         from comments.models import Comment
         parent_comments = Comment.objects.filter(
             article=self.object,
@@ -165,11 +167,11 @@ class ArticleDetailView(DetailView):
         context['seo_description'] = description
         context['seo_keywords'] = keywords
         
-        # 触发文章详情加载钩子，让插件可以添加额外的上下文数据
+        # 触发插件钩子：允许插件向详情页上下文注入额外数据
         from djangoblog.plugin_manage.hook_constants import ARTICLE_DETAIL_LOAD
         hooks.run_action(ARTICLE_DETAIL_LOAD, article=article, context=context, request=self.request)
-        
-        # Action Hook, 通知插件"文章详情已获取"
+
+        # Action Hook：通知所有插件"文章正文已获取"（如浏览计数插件在此累加）
         hooks.run_action('after_article_body_get', article=article, request=self.request)
         return context
 
