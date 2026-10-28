@@ -11,6 +11,7 @@ from .forms import CommentForm
 from .models import Comment, CommentReaction
 
 
+# swn：评论提交视图，登录/CSRF 由 AuthenticatedFormView 基类提供
 class CommentPostView(AuthenticatedFormView):
     """
     评论提交视图
@@ -39,11 +40,13 @@ class CommentPostView(AuthenticatedFormView):
 
     def form_valid(self, form):
         """提交的数据验证合法后的逻辑"""
+        # swn：组装评论→按站点设置决定是否自动启用→关联父评论→保存
         user = self.request.user
         author = BlogUser.objects.get(pk=user.pk)
         article_id = self.kwargs['article_id']
         article = get_object_or_404(Article, pk=article_id)
 
+        # swn：评论关闭时抛裸 ValidationError 会 500；status=='c' 恒不成立（见整改 C-1/C-2）
         if article.comment_status == 'c' or article.status == 'c':
             raise ValidationError("该文章评论已关闭.")
         comment = form.save(False)
@@ -54,6 +57,7 @@ class CommentPostView(AuthenticatedFormView):
             comment.is_enable = True
         comment.author = author
 
+        # swn：父评论 Comment.objects.get 无兜底，异常 id → 500（见 C-3）
         if form.cleaned_data['parent_comment_id']:
             parent_comment = Comment.objects.get(
                 pk=form.cleaned_data['parent_comment_id'])
@@ -65,6 +69,7 @@ class CommentPostView(AuthenticatedFormView):
             (article.get_absolute_url(), comment.pk))
 
 
+# swn：评论 Emoji 反应 API；GET 公开读取、POST 需登录切换
 class CommentReactionView(View):
     """
     评论 Emoji 反应 API
@@ -86,6 +91,7 @@ class CommentReactionView(View):
         })
 
     def post(self, request, comment_id):
+        # swn：校验类型合法后 get_or_create 实现“点/取消”幂等切换
         # POST 需要登录验证
         if not request.user.is_authenticated:
             return JsonResponse({

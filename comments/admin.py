@@ -6,6 +6,7 @@ from django.utils.translation import gettext_lazy as _
 from .models import Comment, CommentReaction
 
 
+# swn：批量启用/禁用评论动作
 def disable_commentstatus(modeladmin, request, queryset):
     queryset.update(is_enable=False)
 
@@ -18,6 +19,7 @@ disable_commentstatus.short_description = _('Disable comments')
 enable_commentstatus.short_description = _('Enable comments')
 
 
+# swn：评论后台；列表/筛选/批量动作，author/article 用 raw_id 优化，附跳链列
 class CommentAdmin(admin.ModelAdmin):
     list_per_page = 20
     list_display = (
@@ -51,6 +53,7 @@ class CommentAdmin(admin.ModelAdmin):
     link_to_article.short_description = _('Article')
 
 
+# swn：评论反应后台；按类型/时间筛选，附评论与用户跳链列
 class CommentReactionAdmin(admin.ModelAdmin):
     list_display = ('id', 'reaction_type', 'link_to_comment', 'link_to_user', 'created_at')
     list_display_links = ('id', 'reaction_type')

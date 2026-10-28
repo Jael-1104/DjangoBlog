@@ -8,6 +8,7 @@ from blog.models import Article
 
 # Create your models here.
 
+# swn：评论主模型；自关联 parent_comment 支持楼中楼，is_enable 控审核展示
 class Comment(models.Model):
     body = models.TextField('正文', max_length=300)
     creation_time = models.DateTimeField(_('creation time'), default=now)
@@ -34,6 +35,7 @@ class Comment(models.Model):
         verbose_name = _('comment')
         verbose_name_plural = verbose_name
         get_latest_by = 'id'
+        # swn：为“文章+父评论+启用”列表与“启用+id”侧栏查询建组合索引
         indexes = [
             # 优化评论列表查询：article + parent_comment + is_enable组合索引
             models.Index(fields=['article', 'parent_comment', 'is_enable'], name='idx_art_parent_enable'),
@@ -57,6 +59,7 @@ class Comment(models.Model):
             ...
         }
         """
+        # swn：按 emoji 聚合计数并取点赞人（最多 10 个）；未登录 has_reacted 恒 False
         from django.db.models import Count
 
         reactions = CommentReaction.objects.filter(
@@ -91,6 +94,7 @@ class Comment(models.Model):
         return result
 
 
+# swn：评论 Emoji 反应/点赞；(comment,user,reaction_type) 唯一保证幂等
 class CommentReaction(models.Model):
     """
     评论的 Emoji 反应/点赞

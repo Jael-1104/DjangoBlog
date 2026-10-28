@@ -8,6 +8,7 @@ from djangoblog.utils import send_email
 logger = logging.getLogger(__name__)
 
 
+# swn：评论通知邮件——先给评论作者发“已收录”，再（若有父评论）通知被回复者
 def send_comment_email(comment):
     site = get_current_site().domain
     subject = _('Thanks for your comment')
