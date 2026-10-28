@@ -3,6 +3,7 @@ from django import template
 register = template.Library()
 
 
+# swn：从父评论递归展开其所有已启用子评论（楼中楼展平）
 @register.simple_tag
 def parse_commenttree(commentlist, comment):
     """获得当前评论子评论的列表
@@ -20,6 +21,7 @@ def parse_commenttree(commentlist, comment):
     return datas
 
 
+# swn：渲染单条评论，ischild 决定缩进层级
 @register.inclusion_tag('comments/tags/comment_item.html')
 def show_comment_item(comment, ischild):
     """评论"""
