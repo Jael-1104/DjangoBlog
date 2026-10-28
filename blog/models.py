@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class LinkShowType(models.TextChoices):
+    # wjq：友情链接/组件展示位置枚举（首页/列表/文章/全部/侧栏）
     I = ('i', _('index'))
     L = ('l', _('list'))
     P = ('p', _('post'))
@@ -26,6 +27,7 @@ class LinkShowType(models.TextChoices):
     S = ('s', _('slide'))
 
 
+# wjq：抽象基类，统一 id/创建时间/修改时间，并封装 slug 生成与绝对 URL
 class BaseModel(models.Model):
     """所有可缓存/带时间戳内容的抽象基类，统一提供主键与时间字段"""
     id = models.AutoField(primary_key=True)
@@ -35,6 +37,7 @@ class BaseModel(models.Model):
     def save(self, *args, **kwargs):
         # 特殊优化：仅更新浏览量(views)时走 queryset.update()，
         # 避免触发完整 save() 流程（含 post_save 信号 / 时间戳刷新）
+        # wjq：浏览量走 update 快路径，绕开信号与全量写，降低热点写放大
         is_update_views = isinstance(
             self,
             Article) and 'update_fields' in kwargs and kwargs['update_fields'] == ['views']
@@ -50,6 +53,7 @@ class BaseModel(models.Model):
             super().save(*args, **kwargs)
 
     def get_full_url(self):
+        # wjq：拼绝对 URL（硬编码 https）
         site = get_current_site().domain
         url = "https://{site}{path}".format(site=site,
                                             path=self.get_absolute_url())
@@ -63,6 +67,7 @@ class BaseModel(models.Model):
         pass
 
 
+# wjq：核心内容模型；status(草稿/发布)、type(文章/独立页)、comment_status 控制展示与评论
 class Article(BaseModel):
     """文章"""
     STATUS_CHOICES = (
@@ -157,6 +162,7 @@ class Article(BaseModel):
 
     def comment_list(self):
         """获取文章启用的评论列表，带 10 小时缓存（读多写少场景）"""
+        # wjq：缓存命中直接返回，未命中回源并缓存已审核评论
         cache_key = CacheKey.ARTICLE_COMMENTS.format(article_id=self.id)
         value = cache.get(cache_key)
         if value:
@@ -195,6 +201,7 @@ class Article(BaseModel):
         return ""
 
 
+# wjq：可自关联的树状分类，slug 由 name 自动生成
 class Category(BaseModel):
     """文章分类"""
     name = models.CharField(_('category name'), max_length=30, unique=True)
@@ -258,6 +265,7 @@ class Category(BaseModel):
         return categorys
 
 
+# wjq：标签，slug 自动生成，文章计数带缓存
 class Tag(BaseModel):
     """文章标签"""
     name = models.CharField(_('tag name'), max_length=30, unique=True)
@@ -279,6 +287,7 @@ class Tag(BaseModel):
         verbose_name_plural = verbose_name
 
 
+# wjq：友情链接，sequence 控制排序，show_type 控制展示位置
 class Links(models.Model):
     """友情链接"""
 
@@ -304,6 +313,7 @@ class Links(models.Model):
         return self.name
 
 
+# wjq：自定义侧边栏块，按 sequence 排序、is_enable 开关
 class SideBar(models.Model):
     """侧边栏,可以展示一些html内容"""
     name = models.CharField(_('title'), max_length=100)
@@ -322,6 +332,7 @@ class SideBar(models.Model):
         return self.name
 
 
+# wjq：站点全局配置（单例）；含 SEO/主题/评论审核等，保存时清全站缓存
 class BlogSettings(models.Model):
     """blog的配置"""
 

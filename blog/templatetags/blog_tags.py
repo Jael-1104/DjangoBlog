@@ -25,7 +25,10 @@ logger = logging.getLogger(__name__)
 
 register = template.Library()
 
+# wjq：===== 通用 / head 元信息标签 =====
 
+
+# wjq：head 元信息，交由插件 filter 注入
 @register.simple_tag(takes_context=True)
 def head_meta(context):
     return mark_safe(hooks.apply_filters('head_meta', '', context))
@@ -73,6 +76,25 @@ def sidebar_markdown(content):
     return mark_safe(html_content)
 
 
+# wjq：正文 MD→HTML 并套文章内容插件钩子
+@register.filter()
+@stringfilter
+def custom_markdown(content):
+    """
+    通用markdown过滤器，应用文章内容插件
+    主要用于文章内容处理
+    """
+    html_content = CommonMarkdown.get_markdown(content)
+    
+    # 然后应用插件过滤器优化HTML
+    from djangoblog.plugin_manage import hooks
+    from djangoblog.plugin_manage.hook_constants import ARTICLE_CONTENT_HOOK_NAME
+    optimized_html = hooks.apply_filters(ARTICLE_CONTENT_HOOK_NAME, html_content)
+    
+    return mark_safe(optimized_html)
+
+
+# wjq：正文渲染主入口；摘要模式先截断再套插件，搜索命中时高亮
 @register.simple_tag(takes_context=True)
 def render_article_content(context, article, is_summary=False):
     """
@@ -151,6 +173,7 @@ def current_nav_item(request):
     return ''
 
 
+# wjq：评论 MD 渲染并做 XSS 清洗
 @register.filter()
 @stringfilter
 def comment_markdown(content):
@@ -207,6 +230,30 @@ def truncate(content):
     return strip_tags(content)[:150]
 
 
+# wjq：===== 摘要 / 截断过滤器 =====
+@register.filter(is_safe=True)
+@stringfilter
+def truncatechars_content(content):
+    """
+    获得文章内容的摘要
+    :param content:
+    :return:
+    """
+    from django.template.defaultfilters import truncatechars_html
+    from djangoblog.utils import get_blog_setting
+    blogsetting = get_blog_setting()
+    return truncatechars_html(content, blogsetting.article_sub_length)
+
+
+@register.filter(is_safe=True)
+@stringfilter
+def truncate(content):
+    from django.utils.html import strip_tags
+
+    return strip_tags(content)[:150]
+
+
+# wjq：===== 面包屑 / 标签 / 侧边栏 等 inclusion_tag =====
 @register.inclusion_tag('blog/tags/breadcrumb.html')
 def load_breadcrumb(article):
     """
@@ -248,6 +295,7 @@ def load_articletags(article):
     }
 
 
+# wjq：侧边栏聚合(最新/热门/分类/标签云/评论/友链)，按 linktype 整体缓存
 @register.inclusion_tag('blog/tags/sidebar.html')
 def load_sidebar(user, linktype):
     """
@@ -336,6 +384,7 @@ def load_article_metas(article, user):
     }
 
 
+# wjq：分页信息；按页类型构建 URL，生成最多 5 页码 + 省略号
 @register.inclusion_tag('blog/tags/article_pagination.html')
 def load_pagination_info(page_obj, page_type, tag_name):
     previous_url = ''
@@ -449,6 +498,7 @@ def load_article_detail_with_highlight(article, highlighted, isindex, user):
     }
 
 
+# wjq：===== 搜索高亮 =====
 @register.filter
 def highlight_search_term(text, query):
     """
@@ -515,6 +565,7 @@ def highlight_content(html_content, query):
     return mark_safe(text)
 
 
+# wjq：===== 用户头像（OAuth 优先，否则默认，缓存 24h）=====
 # 返回用户头像URL
 # 模板使用方法:  {{ email|gravatar_url:150 }}
 @register.filter
@@ -578,6 +629,7 @@ def addstr(arg1, arg2):
     return str(arg1) + str(arg2)
 
 
+# wjq：===== 插件系统资源 / 组件渲染标签 =====
 # === 插件系统模板标签 ===
 
 @register.simple_tag(takes_context=True)

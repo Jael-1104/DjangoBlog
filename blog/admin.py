@@ -17,6 +17,7 @@ class ArticleForm(forms.ModelForm):
         fields = '__all__'
 
 
+# wjq：批量动作——发布 / 转草稿 / 关闭评论 / 开启评论
 def makr_article_publish(modeladmin, request, queryset):
     queryset.update(status='p')
 
@@ -39,6 +40,7 @@ close_article_commentstatus.short_description = _('Close article comments')
 open_article_commentstatus.short_description = _('Open article comments')
 
 
+# wjq：文章后台；列表/筛选/批量动作，作者限超级用户，raw_id 优化大数据选择
 class ArticlelAdmin(admin.ModelAdmin):
     list_per_page = 20
     search_fields = ('body', 'title')
@@ -110,6 +112,7 @@ class SideBarAdmin(admin.ModelAdmin):
     exclude = ('last_mod_time', 'creation_time')
 
 
+# wjq：站点配置后台；禁止增删，列表页直接跳编辑页，保存后清缓存
 class BlogSettingsAdmin(admin.ModelAdmin):
     """单例配置Admin - 直接跳转到编辑页面"""
 

@@ -9,6 +9,7 @@ from blog.documents import ELASTICSEARCH_ENABLED, ElaspedTimeDocumentManager
 logger = logging.getLogger(__name__)
 
 
+# wjq：统计页面渲染耗时；启用 ES 时写性能索引，并回填 <!!LOAD_TIMES!!> 占位
 class OnlineMiddleware(object):
     def __init__(self, get_response=None):
         self.get_response = get_response

@@ -8,6 +8,7 @@ from .models import Category, Article
 logger = logging.getLogger(__name__)
 
 
+# wjq：注入站点级 SEO/导航/配置；整体缓存 10 小时，命中时仅刷新 base_url/年份等动态值
 def seo_processor(requests):
     key = 'seo_processor'
     value = cache.get(key)

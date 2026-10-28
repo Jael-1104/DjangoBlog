@@ -31,6 +31,7 @@ from djangoblog.mixins import (
 logger = logging.getLogger(__name__)
 
 
+# wjq：列表视图公共基类，子类只需实现 get_queryset_data / 缓存键
 class ArticleListView(CachedListViewMixin, PageNumberMixin, ListView):
     """
     文章列表视图基类（重构版）
@@ -58,6 +59,7 @@ class ArticleListView(CachedListViewMixin, PageNumberMixin, ListView):
         return super(ArticleListView, self).get_context_data(**kwargs)
 
 
+# wjq：首页已发布文章列表 + 基础 SEO 数据
 class IndexView(OptimizedArticleQueryMixin, ArticleListView):
     """
     首页视图（重构版）
@@ -86,6 +88,7 @@ class IndexView(OptimizedArticleQueryMixin, ArticleListView):
         return context
 
 
+# wjq：详情页；组装父/子评论分页、生成 SEO、触发插件钩子
 class ArticleDetailView(DetailView):
     '''
     文章详情页面
@@ -101,6 +104,7 @@ class ArticleDetailView(DetailView):
 
         # 性能优化：只查父评论(parent_comment=None)，通过 prefetch_related
         # 一次性预加载子评论及作者，避免 N+1 查询
+        # wjq：仅取父评论 + 预加载，规避评论 N+1
         from comments.models import Comment
         parent_comments = Comment.objects.filter(
             article=self.object,
@@ -176,6 +180,7 @@ class ArticleDetailView(DetailView):
         return context
 
 
+# wjq：分类归档页，聚合该分类及子分类下的已发布文章
 class CategoryDetailView(SlugCachedMixin, OptimizedArticleQueryMixin, ArticleListView):
     """
     分类目录列表（重构版）
@@ -223,6 +228,7 @@ class CategoryDetailView(SlugCachedMixin, OptimizedArticleQueryMixin, ArticleLis
         return super(CategoryDetailView, self).get_context_data(**kwargs)
 
 
+# wjq：按作者 username 归档文章
 class AuthorDetailView(OptimizedArticleQueryMixin, ArticleListView):
     """
     作者详情页（重构版）
@@ -257,6 +263,7 @@ class AuthorDetailView(OptimizedArticleQueryMixin, ArticleListView):
         return super(AuthorDetailView, self).get_context_data(**kwargs)
 
 
+# wjq：按标签 slug 归档文章
 class TagDetailView(SlugCachedMixin, OptimizedArticleQueryMixin, ArticleListView):
     """
     标签列表页面（重构版）
@@ -295,6 +302,7 @@ class TagDetailView(SlugCachedMixin, OptimizedArticleQueryMixin, ArticleListView
         return super(TagDetailView, self).get_context_data(**kwargs)
 
 
+# wjq：全站归档，不分页
 class ArchivesView(OptimizedArticleQueryMixin, ArticleListView):
     """
     文章归档页面（重构版）
@@ -313,6 +321,7 @@ class ArchivesView(OptimizedArticleQueryMixin, ArticleListView):
         return 'archives'
 
 
+# wjq：友链列表页，仅展示启用项
 class LinkListView(ListView):
     model = Links
     template_name = 'blog/links_list.html'
@@ -321,6 +330,7 @@ class LinkListView(ListView):
         return Links.objects.filter(is_enable=True)
 
 
+# wjq：Haystack 搜索视图，开启结果高亮并自定义上下文
 class EsSearchView(SearchView):
     def build_form(self, form_kwargs=None):
         """Override to enable highlighting"""
@@ -353,6 +363,7 @@ class EsSearchView(SearchView):
         return context
 
 
+# wjq：图床上传接口；凭 sign(=sha256(sha256(SECRET_KEY))) 校验、无登录（见整改任务 B-2）
 @csrf_exempt
 def fileupload(request):
     """
@@ -406,5 +417,6 @@ from djangoblog.error_views import (
 
 
 def clean_cache_view(request):
+    # wjq：清空全站缓存的运维接口；当前无鉴权（见整改任务 B-1）
     cache.clear()
     return HttpResponse('ok')

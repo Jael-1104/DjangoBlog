@@ -6,6 +6,7 @@ from haystack.forms import SearchForm
 logger = logging.getLogger(__name__)
 
 
+# wjq：Haystack 搜索表单，附加必填查询字段；无有效查询返回“未找到”
 class BlogSearchForm(SearchForm):
     querydata = forms.CharField(required=True)
 

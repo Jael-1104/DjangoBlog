@@ -1,3 +1,4 @@
+# wjq：Whoosh/Haystack 文章索引定义；仅索引 status='p' 的文章
 from haystack import indexes
 
 from blog.models import Article

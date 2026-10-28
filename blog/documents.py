@@ -7,6 +7,7 @@ from elasticsearch_dsl.connections import connections
 
 from blog.models import Article
 
+# wjq：Elasticsearch DSL 文档定义；模块加载时按配置建立连接并初始化 geoip pipeline
 ELASTICSEARCH_ENABLED = hasattr(settings, 'ELASTICSEARCH_DSL')
 
 if ELASTICSEARCH_ENABLED:
@@ -73,6 +74,7 @@ if ELASTICSEARCH_ENABLED:
         })
 
 
+# wjq：geoip 内嵌文档（IP 归属地）
 class GeoIp(InnerDoc):
     continent_name = Keyword()
     country_iso_code = Keyword()
@@ -95,6 +97,7 @@ class UserAgentDevice(InnerDoc):
     Model = Keyword()
 
 
+# wjq：解析后的 UA 结构（浏览器/系统/设备/是否机器人）
 class UserAgent(InnerDoc):
     browser = Object(UserAgentBrowser, required=False)
     os = Object(UserAgentOS, required=False)
@@ -103,6 +106,7 @@ class UserAgent(InnerDoc):
     is_bot = Boolean()
 
 
+# wjq：页面耗时性能记录文档，索引 performance
 class ElapsedTimeDocument(Document):
     url = Keyword()
     time_taken = Long()
@@ -119,6 +123,7 @@ class ElapsedTimeDocument(Document):
         }
 
 
+# wjq：performance 索引的建/删/写管理（供 middleware 调用）
 class ElaspedTimeDocumentManager:
     @staticmethod
     def build_index():
@@ -171,6 +176,7 @@ class ElaspedTimeDocumentManager:
         doc.save(pipeline="geoip")
 
 
+# wjq：文章搜索文档，索引 blog；中文用 ik 分词
 class ArticleDocument(Document):
     body = Text(analyzer='ik_max_word', search_analyzer='ik_smart')
     title = Text(analyzer='ik_max_word', search_analyzer='ik_smart')
@@ -202,6 +208,7 @@ class ArticleDocument(Document):
         }
 
 
+# wjq：文章索引管理——建/删索引、ORM 转文档、全量重建与增量保存
 class ArticleDocumentManager():
 
     def __init__(self):

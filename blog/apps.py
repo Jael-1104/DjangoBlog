@@ -4,6 +4,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# wjq：应用就绪时确保搜索索引存在；按引擎探测/初始化，异常仅告警不阻断启动
 class BlogConfig(AppConfig):
     name = 'blog'
 
