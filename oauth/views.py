@@ -27,6 +27,7 @@ from .oauthmanager import get_manager_by_type, OAuthAccessTokenException
 logger = logging.getLogger(__name__)
 
 
+# lt：解析 next_url，仅放行本站/相对地址，防开放重定向
 def get_redirecturl(request):
     nexturl = request.GET.get('next_url', None)
     if not nexturl or nexturl == '/login/' or nexturl == '/login':
@@ -45,6 +46,7 @@ def get_redirecturl(request):
     return '/'
 
 
+# lt：发起第三方授权——按 type 取 manager 并跳授权页
 def oauthlogin(request):
     type = request.GET.get('type', None)
     if not type:
@@ -57,6 +59,7 @@ def oauthlogin(request):
     return HttpResponseRedirect(authorizeurl)
 
 
+# lt：授权回调主流程——换 token→取用户信息→建档/绑定邮箱→登录
 def authorize(request):
     type = request.GET.get('type', None)
     if not type:
@@ -140,6 +143,7 @@ def authorize(request):
         return HttpResponseRedirect(nexturl)
 
 
+# lt：邮箱确认链接回调——校验签名→绑定 author→登录并发祝贺邮件
 def emailconfirm(request, id, sign):
     if not sign:
         return HttpResponseForbidden()
@@ -197,6 +201,7 @@ def emailconfirm(request, id, sign):
     return response
 
 
+# lt：无邮箱时要求补充邮箱的表单视图，提交后发确认邮件
 class RequireEmailView(FormView):
     form_class = RequireEmailForm
     template_name = 'oauth/require_email.html'
@@ -260,6 +265,7 @@ class RequireEmailView(FormView):
         return HttpResponseRedirect(url)
 
 
+# lt：绑定结果提示页（区分“已发邮件”与“绑定成功”）
 def bindsuccess(request, oauthid):
     type = request.GET.get('type', None)
     oauthuser = get_object_or_404(OAuthUser, pk=oauthid)

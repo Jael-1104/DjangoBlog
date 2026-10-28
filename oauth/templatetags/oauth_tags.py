@@ -6,6 +6,7 @@ from oauth.oauthmanager import get_oauth_apps
 register = template.Library()
 
 
+# lt：渲染可用第三方登录入口，拼 ?type=&next_url= 授权链接
 @register.inclusion_tag('oauth/oauth_applications.html')
 def load_oauth_applications(request):
     applications = get_oauth_apps()

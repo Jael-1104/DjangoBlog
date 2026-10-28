@@ -6,6 +6,7 @@ from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _
 
 
+# lt：第三方登录用户档案；(type,openid) 未加唯一约束（见整改 D-2）
 class OAuthUser(models.Model):
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -32,6 +33,7 @@ class OAuthUser(models.Model):
         ordering = ['-creation_time']
 
 
+# lt：各平台 OAuth 应用配置（appkey/secret/回调）；clean 限制每类型仅一条
 class OAuthConfig(models.Model):
     TYPE = (
         ('weibo', _('weibo')),
@@ -54,6 +56,7 @@ class OAuthConfig(models.Model):
     last_modify_time = models.DateTimeField(_('last modify time'), default=now)
 
     def clean(self):
+        # lt：同一 type 只允许一条配置（注意 clean 非并发安全）
         if OAuthConfig.objects.filter(
                 type=self.type).exclude(id=self.id).count():
             raise ValidationError(_(self.type + _('already exists')))

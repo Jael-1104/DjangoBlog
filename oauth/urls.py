@@ -3,6 +3,7 @@ from django.urls import path
 from . import views
 
 app_name = "oauth"
+# lt：授权回调(authorize)、发起登录(oauthlogin)、补邮箱/确认/绑定结果路由
 urlpatterns = [
     path(
         r'oauth/authorize',

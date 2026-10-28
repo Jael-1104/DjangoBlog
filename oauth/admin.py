@@ -8,6 +8,7 @@ from django.utils.html import format_html
 logger = logging.getLogger(__name__)
 
 
+# lt：OAuth 用户后台；只读展示(禁新增)，附作者跳链与头像列
 class OAuthUserAdmin(admin.ModelAdmin):
     search_fields = ('nickname', 'email')
     list_per_page = 20
@@ -49,6 +50,7 @@ class OAuthUserAdmin(admin.ModelAdmin):
     show_user_image.short_description = '用户头像'
 
 
+# lt：OAuth 配置后台；当前 list_display 明文含 appsecret（见整改 D-1）
 class OAuthConfigAdmin(admin.ModelAdmin):
     list_display = ('type', 'appkey', 'appsecret', 'is_enable')
     list_filter = ('type',)

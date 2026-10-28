@@ -12,12 +12,14 @@ from oauth.models import OAuthUser, OAuthConfig
 logger = logging.getLogger(__name__)
 
 
+# lt：授权换 token 失败异常
 class OAuthAccessTokenException(Exception):
     '''
     oauth授权失败异常
     '''
 
 
+# lt：各平台 Manager 抽象基类：定义授权/取token/取用户信息接口与 HTTP 工具
 class BaseOauthManager(metaclass=ABCMeta):
     """获取用户授权"""
     AUTH_URL = None
@@ -71,6 +73,7 @@ class BaseOauthManager(metaclass=ABCMeta):
         return value[0] if value else None
 
 
+# lt：微博登录实现
 class WBOauthManager(BaseOauthManager):
     AUTH_URL = 'https://api.weibo.com/oauth2/authorize'
     TOKEN_URL = 'https://api.weibo.com/oauth2/access_token'
@@ -146,6 +149,7 @@ class WBOauthManager(BaseOauthManager):
         return datas['avatar_large']
 
 
+# lt：Mixin——为需要梯子的平台注入 HTTP 代理并重写 do_get/do_post
 class ProxyManagerMixin:
     def __init__(self, *args, **kwargs):
         if os.environ.get("HTTP_PROXY"):
@@ -167,6 +171,7 @@ class ProxyManagerMixin:
         return rsp.text
 
 
+# lt：Google 登录实现（走代理 Mixin）
 class GoogleOauthManager(ProxyManagerMixin, BaseOauthManager):
     AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
     TOKEN_URL = 'https://www.googleapis.com/oauth2/v4/token'
@@ -245,6 +250,7 @@ class GoogleOauthManager(ProxyManagerMixin, BaseOauthManager):
         return datas['picture']
 
 
+# lt：GitHub 登录实现；邮箱不公开时回退查 /user/emails 取已验证主邮箱
 class GitHubOauthManager(ProxyManagerMixin, BaseOauthManager):
     AUTH_URL = 'https://github.com/login/oauth/authorize'
     TOKEN_URL = 'https://github.com/login/oauth/access_token'
@@ -338,6 +344,7 @@ class GitHubOauthManager(ProxyManagerMixin, BaseOauthManager):
         return datas['avatar_url']
 
 
+# lt：Facebook 登录实现（走代理 Mixin）
 class FaceBookOauthManager(ProxyManagerMixin, BaseOauthManager):
     AUTH_URL = 'https://www.facebook.com/v16.0/dialog/oauth'
     TOKEN_URL = 'https://graph.facebook.com/v16.0/oauth/access_token'
@@ -412,6 +419,7 @@ class FaceBookOauthManager(ProxyManagerMixin, BaseOauthManager):
         return str(datas['picture']['data']['url'])
 
 
+# lt：QQ 登录实现；需先经 /me 取 openid 再拉用户信息
 class QQOauthManager(BaseOauthManager):
     AUTH_URL = 'https://graph.qq.com/oauth2.0/authorize'
     TOKEN_URL = 'https://graph.qq.com/oauth2.0/token'
@@ -501,6 +509,7 @@ class QQOauthManager(BaseOauthManager):
         return str(datas['figureurl'])
 
 
+# lt：返回已启用平台的 manager 实例列表，缓存 100 分钟
 @cache_decorator(expiration=100 * 60)
 def get_oauth_apps():
     configs = OAuthConfig.objects.filter(is_enable=True).all()
@@ -508,10 +517,12 @@ def get_oauth_apps():
         return []
     configtypes = [x.type for x in configs]
     applications = BaseOauthManager.__subclasses__()
+    # lt：x() 在过滤与实例化各调一次，每 manager 重复读配置（见 D-3）
     apps = [x() for x in applications if x().ICON_NAME.lower() in configtypes]
     return apps
 
 
+# lt：按类型取对应 manager 实例（供 views 分发）
 def get_manager_by_type(type):
     applications = get_oauth_apps()
     if applications:
