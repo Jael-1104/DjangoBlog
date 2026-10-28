@@ -4,6 +4,7 @@ from django.views.decorators.cache import cache_page
 from . import views
 
 app_name = "blog"
+# wjq：站点页路由：首页/分页、文章详情、分类/作者/标签(含分页)、归档、友链、上传、清缓存
 urlpatterns = [
     path(
         r'',
@@ -57,6 +58,7 @@ urlpatterns = [
         name='upload'),
     path(
         r'clean',
+        # wjq：清缓存运维入口（整改任务 B-1 待加鉴权）
         views.clean_cache_view,
         name='clean'),
 ]
