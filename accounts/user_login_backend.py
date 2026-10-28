@@ -8,6 +8,7 @@ class EmailOrUsernameModelBackend(ModelBackend):
     """
 
     def authenticate(self, request, username=None, password=None, **kwargs):
+        # phy：含 @ 走邮箱查询，否则走用户名查询
         if '@' in username:
             kwargs = {'email': username}
         else:
@@ -20,6 +21,7 @@ class EmailOrUsernameModelBackend(ModelBackend):
             return None
 
     def get_user(self, username):
+        # phy：按主键取用户，供 session 反序列化
         try:
             return get_user_model().objects.get(pk=username)
         except get_user_model().DoesNotExist:

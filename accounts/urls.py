@@ -4,6 +4,7 @@ from django.urls import re_path
 from . import views
 from .forms import LoginForm
 
+# phy：app_name 为 accounts，但主 urls 以实例命名空间 'account' 挂载，全站统一用 account:xxx 反解
 app_name = "accounts"
 
 urlpatterns = [re_path(r'^login/$',

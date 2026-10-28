@@ -8,13 +8,15 @@ from djangoblog.utils import get_current_site
 
 # Create your models here.
 
+# phy：自定义用户模型，继承 AbstractUser，通过 AUTH_USER_MODEL 指定
 class BlogUser(AbstractUser):
-    nickname = models.CharField(_('nick name'), max_length=100, blank=True)
-    creation_time = models.DateTimeField(_('creation time'), default=now)
-    last_modify_time = models.DateTimeField(_('last modify time'), default=now)
-    source = models.CharField(_('create source'), max_length=100, blank=True)
+    nickname = models.CharField(_('nick name'), max_length=100, blank=True)  # phy：昵称
+    creation_time = models.DateTimeField(_('creation time'), default=now)  # phy：创建时间
+    last_modify_time = models.DateTimeField(_('last modify time'), default=now)  # phy：最后修改时间
+    source = models.CharField(_('create source'), max_length=100, blank=True)  # phy：注册来源
 
     def get_absolute_url(self):
+        # phy：作者详情页相对路径
         return reverse(
             'blog:author_detail', kwargs={
                 'author_name': self.username})
@@ -23,6 +25,7 @@ class BlogUser(AbstractUser):
         return self.email
 
     def get_full_url(self):
+        # phy：拼接带域名的绝对 URL（硬编码 https）
         site = get_current_site().domain
         url = "https://{site}{path}".format(site=site,
                                             path=self.get_absolute_url())

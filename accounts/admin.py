@@ -9,6 +9,7 @@ from .models import BlogUser
 
 
 class BlogUserCreationForm(forms.ModelForm):
+    # phy：后台新增用户表单，save 时哈希密码并标记来源 adminsite
     password1 = forms.CharField(label=_('password'), widget=forms.PasswordInput)
     password2 = forms.CharField(label=_('Enter password again'), widget=forms.PasswordInput)
 
@@ -35,6 +36,7 @@ class BlogUserCreationForm(forms.ModelForm):
 
 
 class BlogUserChangeForm(UserChangeForm):
+    # phy：后台编辑用户表单
     class Meta:
         model = BlogUser
         fields = '__all__'
@@ -45,6 +47,7 @@ class BlogUserChangeForm(UserChangeForm):
 
 
 class BlogUserAdmin(UserAdmin):
+    # phy：用户后台配置：列表列/排序/搜索
     form = BlogUserChangeForm
     add_form = BlogUserCreationForm
     list_display = (

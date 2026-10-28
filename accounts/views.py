@@ -37,6 +37,7 @@ class RegisterView(SecureFormView):
     template_name = 'account/registration_form.html'
 
     def form_valid(self, form):
+        # phy：保存用户→置为未激活→发邮件验证链接（含签名），跳转到注册结果页
         if form.is_valid():
             user = form.save(False)
             user.is_active = False
@@ -86,6 +87,7 @@ class LogoutView(LogoutRedirectView):
     url = '/login/'
 
     def get(self, request, *args, **kwargs):
+        # phy：清 session + 侧边栏缓存 + 登录标记 cookie
         logout(request)
         delete_sidebar_cache()
         # 获取响应对象并删除登录标记 cookie
@@ -109,6 +111,7 @@ class LoginView(LoginFormView):
     redirect_field_name = REDIRECT_FIELD_NAME
 
     def get_context_data(self, **kwargs):
+        # phy：把 ?next= 透传给模板，默认首页
         redirect_to = self.request.GET.get(self.redirect_field_name)
         if redirect_to is None:
             redirect_to = '/'
@@ -117,6 +120,7 @@ class LoginView(LoginFormView):
         return super(LoginView, self).get_context_data(**kwargs)
 
     def form_valid(self, form):
+        # phy：重新用 AuthenticationForm 校验→登录→按“记住我”设有效期→写登录标记 cookie
         form = AuthenticationForm(data=self.request.POST, request=self.request)
 
         if form.is_valid():
@@ -150,7 +154,7 @@ class LoginView(LoginFormView):
             })
 
     def get_success_url(self):
-
+        # phy：校验 next 域名合法性，防开放重定向
         redirect_to = self.request.POST.get(self.redirect_field_name)
         if not url_has_allowed_host_and_scheme(
                 url=redirect_to, allowed_hosts=[
@@ -160,6 +164,7 @@ class LoginView(LoginFormView):
 
 
 def account_result(request):
+    # phy：注册/邮箱验证结果页；validation 类型校验签名后置为激活
     type = request.GET.get('type')
     id = request.GET.get('id')
 
@@ -202,6 +207,7 @@ class ForgetPasswordView(SecureFormView):
     template_name = 'account/forget_password.html'
 
     def form_valid(self, form):
+        # phy：表单已校验邮箱+验证码，这里按邮箱取用户并重置密码
         if form.is_valid():
             blog_user = BlogUser.objects.filter(email=form.cleaned_data.get("email")).get()
             blog_user.password = make_password(form.cleaned_data["new_password2"])
@@ -212,7 +218,7 @@ class ForgetPasswordView(SecureFormView):
 
 
 class ForgetPasswordEmailCode(View):
-
+    # phy：生成验证码存缓存并邮件发送
     def post(self, request: HttpRequest):
         form = ForgetPasswordCodeForm(request.POST)
         if not form.is_valid():
