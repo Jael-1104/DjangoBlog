@@ -13,8 +13,10 @@ from servermanager.api.blogapi import BlogApi
 from servermanager.api.commonapi import ChatGPT, CommandHandler
 from .MemcacheStorage import MemcacheStorage
 
+# zym：初始化微信机器人；token 取环境变量否则回退默认（见原 E 记录）
 robot = WeRoBot(token=os.environ.get('DJANGO_WEROBOT_TOKEN')
                       or 'lylinux', enable_session=True)
+# zym：会话存储优先用基于 Django cache 的 MemcacheStorage，不可用则回退文件存储
 memstorage = MemcacheStorage()
 if memstorage.is_available:
     robot.config['SESSION_STORAGE'] = memstorage
@@ -29,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 def convert_to_article_reply(articles, message):
+    # zym：把文章列表转为微信图文回复，正则抓首图、正文截断为摘要
     reply = ArticlesReply(message=message)
     from blog.templatetags.blog_tags import truncatechars_content
     for post in articles:
@@ -48,6 +51,7 @@ def convert_to_article_reply(articles, message):
 
 @robot.filter(re.compile(r"^\?.*"))
 def search(message, session):
+    # zym：`?关键词` 触发文章搜索
     s = message.content
     searchstr = str(s).replace('?', '')
     result = blogapi.search_articles(searchstr)
@@ -61,6 +65,7 @@ def search(message, session):
 
 @robot.filter(re.compile(r'^category\s*$', re.I))
 def category(message, session):
+    # zym：`category` 返回全部分类目录
     categorys = blogapi.get_category_lists()
     content = ','.join(map(lambda x: x.name, categorys))
     return '所有文章分类目录：' + content
@@ -68,6 +73,7 @@ def category(message, session):
 
 @robot.filter(re.compile(r'^recent\s*$', re.I))
 def recents(message, session):
+    # zym：`recent` 返回最新文章
     articles = blogapi.get_recent_articles()
     if articles:
         reply = convert_to_article_reply(articles, message)
@@ -110,12 +116,15 @@ def idcard(message, session):
 
 @robot.handler
 def echo(message, session):
+    # zym：兜底处理器，其余消息交给 MessageHandler
     handler = MessageHandler(message, session)
     return handler.handler()
 
 
 class MessageHandler:
+    # zym：核心会话状态机：管理员验证 → 命令确认执行 → 否则走 AI 对话
     def __init__(self, message, session):
+        # zym：从 session 恢复用户状态，损坏则重置
         userid = message.source
         self.message = message
         self.session = session
@@ -140,6 +149,9 @@ class MessageHandler:
         self.session[self.userid] = info
 
     def handler(self):
+        # zym：状态流转：EXIT 退出 / ADMIN 进入验证 / 密码哈希校验(3 次上限) /
+        #      已验证则“确认执行 Y”触发命令，否则把输入当命令标题暂存 /
+        #      普通用户走 ChatGPT.chat（聊天原始文本仅作标题键，不直接执行）
         info = self.message.content
 
         if self.userinfo.isAdmin and info.upper() == 'EXIT':
@@ -180,6 +192,7 @@ class MessageHandler:
 
 
 class WxUserInfo():
+    # zym：会话内用户状态（是否管理员/密码是否已设/失败计数/待执行命令）
     def __init__(self):
         self.isAdmin = False
         self.isPasswordSet = False

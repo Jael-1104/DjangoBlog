@@ -1,3 +1,4 @@
+# zym：基于 Django cache 的 werobot 会话存储；以 JSON 序列化、key 加前缀
 from werobot.session import SessionStorage
 from werobot.utils import json_loads, json_dumps
 
@@ -11,6 +12,7 @@ class MemcacheStorage(SessionStorage):
 
     @property
     def is_available(self):
+        # zym：写入再读回探测缓存是否可用
         value = "1"
         self.set('checkavaliable', value=value)
         return value == self.get('checkavaliable')
