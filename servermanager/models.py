@@ -2,6 +2,7 @@ from django.db import models
 
 
 # Create your models here.
+# zym：后台预注册的系统命令（title 匹配键、command 实际 shell、describe 帮助）
 class commands(models.Model):
     title = models.CharField('命令标题', max_length=300)
     command = models.CharField('命令', max_length=2000)
@@ -17,6 +18,7 @@ class commands(models.Model):
         verbose_name_plural = verbose_name
 
 
+# zym：邮件发送审计日志（只增记录，用于追踪发信结果）
 class EmailSendLog(models.Model):
     emailto = models.CharField('收件人', max_length=300)
     title = models.CharField('邮件标题', max_length=2000)

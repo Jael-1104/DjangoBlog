@@ -2,10 +2,12 @@ from django.contrib import admin
 # Register your models here.
 
 
+# zym：命令管理（title/command/describe 列表展示）
 class CommandsAdmin(admin.ModelAdmin):
     list_display = ('title', 'command', 'describe')
 
 
+# zym：邮件发送日志只读后台，禁止新增
 class EmailSendLogAdmin(admin.ModelAdmin):
     list_display = ('title', 'emailto', 'send_result', 'creation_time')
     readonly_fields = (
