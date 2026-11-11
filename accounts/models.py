@@ -10,6 +10,8 @@ from djangoblog.utils import get_current_site
 
 # phy：自定义用户模型，继承 AbstractUser，通过 AUTH_USER_MODEL 指定
 class BlogUser(AbstractUser):
+    # phy：覆盖父类 email 并加唯一约束（执行迁移前先用 check_duplicate_emails 清洗）
+    email = models.EmailField(_('email address'), unique=True)
     nickname = models.CharField(_('nick name'), max_length=100, blank=True)  # phy：昵称
     creation_time = models.DateTimeField(_('creation time'), default=now)  # phy：创建时间
     last_modify_time = models.DateTimeField(_('last modify time'), default=now)  # phy：最后修改时间

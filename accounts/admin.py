@@ -15,7 +15,8 @@ class BlogUserCreationForm(forms.ModelForm):
 
     class Meta:
         model = BlogUser
-        fields = ('email',)
+        # phy：补上必填的 username，避免后台建号时 username 为空导致冲突
+        fields = ('username', 'email')
 
     def clean_password2(self):
         # Check that the two password entries match

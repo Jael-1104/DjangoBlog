@@ -69,7 +69,7 @@ class RegisterView(SecureFormView):
                 title='验证您的电子邮箱',
                 content=content)
 
-            url = reverse('accounts:result') + \
+            url = reverse('account:result') + \
                   '?type=register&id=' + str(user.id)
             return HttpResponseRedirect(url)
         else:
@@ -209,7 +209,10 @@ class ForgetPasswordView(SecureFormView):
     def form_valid(self, form):
         # phy：表单已校验邮箱+验证码，这里按邮箱取用户并重置密码
         if form.is_valid():
-            blog_user = BlogUser.objects.filter(email=form.cleaned_data.get("email")).get()
+            # phy：email 已加唯一约束，仍用 first() 兜底，避免异常数据导致 500
+            blog_user = BlogUser.objects.filter(email=form.cleaned_data.get("email")).first()
+            if not blog_user:
+                return self.render_to_response({'form': form})
             blog_user.password = make_password(form.cleaned_data["new_password2"])
             blog_user.save()
             return HttpResponseRedirect('/login/')
@@ -224,6 +227,12 @@ class ForgetPasswordEmailCode(View):
         if not form.is_valid():
             return HttpResponse("错误的邮箱")
         to_email = form.cleaned_data["email"]
+
+        # phy：先校验邮箱格式，再做限流，避免非法请求消耗额度；返回 200 让前端就地提示
+        ip = utils.get_client_ip(request)
+        if utils.is_send_code_limited(ip, to_email):
+            return HttpResponse("请求过于频繁，请稍后再试")
+        utils.mark_send_code(ip, to_email)
 
         code = generate_code()
         utils.send_verify_email(to_email, code)
