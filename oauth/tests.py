@@ -297,3 +297,76 @@ class OauthLoginTest(TestCase):
         self.assertEqual(user.username, mock_user_info['screen_name'])
         self.assertEqual(user.email, 'test@gmail.com')
         self.assertEqual(oauth_user.pk, oauth_user_id)
+
+    @patch("oauth.oauthmanager.WBOauthManager.do_post")
+    @patch("oauth.oauthmanager.WBOauthManager.do_get")
+    def test_weibo_repeat_login_reuses_oauth_user(self, mock_do_get, mock_do_post):
+        """D-2 同一第三方账号重复登录不会新建 OAuthUser"""
+        mock_do_post.return_value = json.dumps(
+            {"access_token": "access_token", "uid": "uid"})
+        mock_do_get.return_value = json.dumps({
+            "avatar_large": "avatar_large",
+            "screen_name": "screen_name1",
+            "id": "id",
+            "email": "email",
+        })
+
+        self.client.get('/oauth/authorize?type=weibo&code=code')
+        self.client.logout()
+        self.client.get('/oauth/authorize?type=weibo&code=code')
+
+        from oauth.models import OAuthUser
+        self.assertEqual(
+            OAuthUser.objects.filter(type='weibo', openid='id').count(), 1)
+
+    @patch("oauth.oauthmanager.WBOauthManager.do_post")
+    @patch("oauth.oauthmanager.WBOauthManager.do_get")
+    def test_authorize_type_case_insensitive(self, mock_do_get, mock_do_post):
+        """D-2 URL 中 type 大小写不同时仍复用同一条 OAuthUser"""
+        mock_do_post.return_value = json.dumps(
+            {"access_token": "access_token", "uid": "uid"})
+        mock_do_get.return_value = json.dumps({
+            "avatar_large": "avatar_large",
+            "screen_name": "screen_name1",
+            "id": "id",
+            "email": "email",
+        })
+
+        self.client.get('/oauth/authorize?type=weibo&code=code')
+        self.client.logout()
+        self.client.get('/oauth/authorize?type=WEIBO&code=code')
+
+        from oauth.models import OAuthUser
+        self.assertEqual(OAuthUser.objects.filter(openid='id').count(), 1)
+
+
+class GetOAuthAppsTest(TestCase):
+    """D-3 get_oauth_apps 不应重复实例化 manager"""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+
+    def test_manager_instantiated_once(self):
+        """D-3 每个启用平台只实例化一次"""
+        from unittest.mock import patch
+        from oauth.oauthmanager import get_oauth_apps, WBOauthManager
+
+        OAuthConfig.objects.create(
+            type='weibo', appkey='k', appsecret='s',
+            callback_url='http://example.com/cb')
+
+        with patch.object(WBOauthManager, '__init__', return_value=None) as mock_init:
+            get_oauth_apps()
+
+        self.assertEqual(mock_init.call_count, 1)
+
+    def test_disabled_config_excluded(self):
+        """D-3 禁用状态的平台不返回"""
+        from oauth.oauthmanager import get_oauth_apps
+
+        OAuthConfig.objects.create(
+            type='weibo', appkey='k', appsecret='s',
+            callback_url='http://example.com/cb', is_enable=False)
+
+        self.assertEqual(get_oauth_apps(), [])

@@ -83,16 +83,17 @@ def authorize(request):
     if user:
         if not user.nickname or not user.nickname.strip():
             user.nickname = "djangoblog" + timezone.now().strftime('%y%m%d%I%M%S')
-        try:
-            temp = OAuthUser.objects.get(type=type, openid=user.openid)
-            temp.picture = user.picture
-            temp.metadata = user.metadata
-            temp.nickname = user.nickname
-            user = temp
-        except ObjectDoesNotExist:
-            pass
+        # lt：D-2 改用 manager 规范化的 user.type 查找，避免 URL 里 type 大小写不同时
+        # lt：查不到旧记录而重复建档；filter().first() 兜底历史重复行，不再抛 MultipleObjectsReturned
+        existing = OAuthUser.objects.filter(
+            type=user.type, openid=user.openid).first()
+        if existing:
+            existing.picture = user.picture
+            existing.metadata = user.metadata
+            existing.nickname = user.nickname
+            user = existing
         # facebook的token过长
-        if type == 'facebook':
+        if user.type == 'facebook':
             user.token = ''
         if user.email:
             with transaction.atomic():

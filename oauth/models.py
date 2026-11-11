@@ -31,6 +31,13 @@ class OAuthUser(models.Model):
         verbose_name = _('oauth user')
         verbose_name_plural = verbose_name
         ordering = ['-creation_time']
+        # lt：同一平台的 openid 唯一（D-2）；此前 authorize 用 get() 查重，
+        # lt：重复行会抛 MultipleObjectsReturned 直接 500
+        constraints = [
+            models.UniqueConstraint(
+                fields=['type', 'openid'],
+                name='uniq_oauth_type_openid')
+        ]
 
 
 # lt：各平台 OAuth 应用配置（appkey/secret/回调）；clean 限制每类型仅一条

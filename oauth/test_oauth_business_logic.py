@@ -193,6 +193,25 @@ class OAuthUserTest(TestCase):
 
         self.assertEqual(oauth_user.nickname, nickname)
 
+    def test_duplicate_type_openid_rejected(self):
+        """D-2 同一 type + openid 不能重复入库"""
+        from django.db import IntegrityError, transaction
+
+        OAuthUser.objects.create(
+            openid='dup_openid', nickname='First', token='t', type='weibo')
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                OAuthUser.objects.create(
+                    openid='dup_openid', nickname='Second', type='weibo')
+
+    def test_same_openid_different_type_allowed(self):
+        """D-2 不同平台允许存在相同 openid"""
+        OAuthUser.objects.create(openid='shared', nickname='A', type='weibo')
+        OAuthUser.objects.create(openid='shared', nickname='B', type='github')
+        self.assertEqual(
+            OAuthUser.objects.filter(openid='shared').count(), 2)
+
 
 class OAuthUserQueryTest(TestCase):
     """测试OAuth用户查询业务逻辑"""

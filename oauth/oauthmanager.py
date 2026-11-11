@@ -69,8 +69,8 @@ class BaseOauthManager(metaclass=ABCMeta):
         return rsp.text
 
     def get_config(self):
-        value = OAuthConfig.objects.filter(type=self.ICON_NAME)
-        return value[0] if value else None
+        # lt：first() 语义更清晰，无配置时返回 None
+        return OAuthConfig.objects.filter(type=self.ICON_NAME).first()
 
 
 # lt：微博登录实现
@@ -512,14 +512,16 @@ class QQOauthManager(BaseOauthManager):
 # lt：返回已启用平台的 manager 实例列表，缓存 100 分钟
 @cache_decorator(expiration=100 * 60)
 def get_oauth_apps():
-    configs = OAuthConfig.objects.filter(is_enable=True).all()
-    if not configs:
+    # lt：只取 type 一列，避免把整行配置读进内存
+    configtypes = {
+        t.lower() for t in OAuthConfig.objects.filter(
+            is_enable=True).values_list('type', flat=True)
+    }
+    if not configtypes:
         return []
-    configtypes = [x.type for x in configs]
     applications = BaseOauthManager.__subclasses__()
-    # lt：x() 在过滤与实例化各调一次，每 manager 重复读配置（见 D-3）
-    apps = [x() for x in applications if x().ICON_NAME.lower() in configtypes]
-    return apps
+    # lt：D-3 ICON_NAME 是类属性，过滤阶段用 x.ICON_NAME 即可，每个 manager 只实例化一次
+    return [x() for x in applications if x.ICON_NAME.lower() in configtypes]
 
 
 # lt：按类型取对应 manager 实例（供 views 分发）
