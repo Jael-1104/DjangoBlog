@@ -1,6 +1,5 @@
 # Create your views here.
-from django.core.exceptions import ValidationError
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpResponseForbidden, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
 
@@ -46,9 +45,11 @@ class CommentPostView(AuthenticatedFormView):
         article_id = self.kwargs['article_id']
         article = get_object_or_404(Article, pk=article_id)
 
-        # swn：评论关闭时抛裸 ValidationError 会 500；status=='c' 恒不成立（见整改 C-1/C-2）
-        if article.comment_status == 'c' or article.status == 'c':
-            raise ValidationError("该文章评论已关闭.")
+        # swn：C-1/C-2 评论已关闭（comment_status='c'）或文章为草稿（status='d'）时拒绝；
+        # swn：此时模板不渲染评论表单，不存在正常提交入口，按越权请求 403，替代会 500 的裸 ValidationError
+        if article.comment_status == 'c' or article.status == 'd':
+            return HttpResponseForbidden('该文章评论已关闭.')
+
         comment = form.save(False)
         comment.article = article
         from djangoblog.utils import get_blog_setting
@@ -57,13 +58,21 @@ class CommentPostView(AuthenticatedFormView):
             comment.is_enable = True
         comment.author = author
 
-        # swn：父评论 Comment.objects.get 无兜底，异常 id → 500（见 C-3）
-        if form.cleaned_data['parent_comment_id']:
-            parent_comment = Comment.objects.get(
-                pk=form.cleaned_data['parent_comment_id'])
+        # swn：C-3 父评论必须存在、属于本文且已审核通过，否则回表单错误而不是抛 DoesNotExist(500)
+        parent_comment_id = form.cleaned_data.get('parent_comment_id')
+        if parent_comment_id:
+            parent_comment = Comment.objects.filter(
+                pk=parent_comment_id,
+                article=article,
+                is_enable=True
+            ).first()
+            if parent_comment is None:
+                form.add_error('body', '要回复的评论不存在或已被删除.')
+                return self.form_invalid(form)
             comment.parent_comment = parent_comment
 
-        comment.save(True)
+        # swn：force_insert 显式关键字参数，替代 save(True) 的位置参数弃用写法
+        comment.save(force_insert=True)
         return HttpResponseRedirect(
             "%s#div-comment-%d" %
             (article.get_absolute_url(), comment.pk))
