@@ -105,6 +105,74 @@ class CommentViewTest(TransactionTestCase, ViewTestMixin):
         })
         self.assertIn(response.status_code, [200, 302])
 
+    def test_post_comment_on_closed_article(self):
+        """swn：C-1/C-2 评论开关关闭时返回 403，而不是 500"""
+        self.article.comment_status = 'c'
+        self.article.save()
+
+        self.login_user()
+        url = reverse('comments:postcomment', kwargs={'article_id': self.article.id})
+        response = self.client.post(url, {'body': '关闭后不该出现'})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, '该文章评论已关闭', status_code=403)
+        self.assertFalse(Comment.objects.filter(article=self.article).exists())
+
+    def test_post_comment_on_draft_article(self):
+        """swn：C-2 草稿文章不允许评论（原代码判 status=='c' 恒不成立）"""
+        self.article.status = 'd'
+        self.article.save()
+
+        self.login_user()
+        url = reverse('comments:postcomment', kwargs={'article_id': self.article.id})
+        response = self.client.post(url, {'body': '草稿不该出现'})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, '该文章评论已关闭', status_code=403)
+        self.assertFalse(Comment.objects.filter(article=self.article).exists())
+
+    def test_reply_to_nonexistent_parent(self):
+        """swn：C-3 父评论不存在时回表单错误，而不是 DoesNotExist(500)"""
+        self.login_user()
+        url = reverse('comments:postcomment', kwargs={'article_id': self.article.id})
+        response = self.client.post(url, {
+            'body': '回复一个不存在的评论',
+            'parent_comment_id': 999999
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '要回复的评论不存在')
+        self.assertFalse(Comment.objects.filter(article=self.article).exists())
+
+    def test_reply_to_parent_from_other_article(self):
+        """swn：C-3 禁止跨文章挂回复"""
+        from blog.models import Article
+        other_article = Article.objects.create(
+            title='另一篇文章',
+            body='内容',
+            author=self.user,
+            category=self.category,
+            type='a',
+            status='p'
+        )
+        foreign_parent = Comment.objects.create(
+            body='别的文章的评论',
+            author=self.user,
+            article=other_article,
+            is_enable=True
+        )
+
+        self.login_user()
+        url = reverse('comments:postcomment', kwargs={'article_id': self.article.id})
+        response = self.client.post(url, {
+            'body': '试图跨文章回复',
+            'parent_comment_id': foreign_parent.id
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '要回复的评论不存在')
+        self.assertFalse(Comment.objects.filter(article=self.article).exists())
+
     def test_comment_moderation(self):
         """测试评论审核"""
         # 设置需要审核
