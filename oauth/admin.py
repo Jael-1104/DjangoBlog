@@ -50,7 +50,16 @@ class OAuthUserAdmin(admin.ModelAdmin):
     show_user_image.short_description = '用户头像'
 
 
-# lt：OAuth 配置后台；当前 list_display 明文含 appsecret（见整改 D-1）
+# lt：OAuth 配置后台；appsecret 不再进列表明文，改为掩码展示（D-1 已修）
 class OAuthConfigAdmin(admin.ModelAdmin):
-    list_display = ('type', 'appkey', 'appsecret', 'is_enable')
+    list_display = ('type', 'appkey', 'masked_appsecret', 'is_enable')
     list_filter = ('type',)
+    search_fields = ('type', 'appkey')
+
+    @admin.display(description='AppSecret')
+    def masked_appsecret(self, obj):
+        # lt：只露首尾各 4 位；短密钥全掩码，避免列表页泄露第三方平台凭证
+        secret = obj.appsecret or ''
+        if len(secret) <= 8:
+            return '*' * len(secret)
+        return f'{secret[:4]}{"*" * 8}{secret[-4:]}'
