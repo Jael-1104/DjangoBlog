@@ -154,6 +154,9 @@ class Article(BaseModel):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
+        # wjq：正文/标题变更后失效 SEO 描述缓存；浏览量快路径（update_fields=['views']）不触发
+        if kwargs.get('update_fields') != ['views']:
+            cache.delete(f'article_seo_desc_{self.pk}')
 
     def viewed(self):
         """阅读量 +1，使用 update_fields 触发上面 save() 的轻量更新分支"""

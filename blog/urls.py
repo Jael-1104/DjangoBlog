@@ -54,11 +54,12 @@ urlpatterns = [
         name='links'),
     path(
         r'upload',
+        # wjq：图床上传，staff 或 sign 鉴权 + 后缀白名单（整改 B-2 已完成）
         views.fileupload,
         name='upload'),
     path(
         r'clean',
-        # wjq：清缓存运维入口（整改任务 B-1 待加鉴权）
+        # wjq：清缓存运维入口，仅 staff + POST（整改 B-1 已完成）
         views.clean_cache_view,
         name='clean'),
 ]

@@ -3,14 +3,17 @@ import os
 import uuid
 
 from django.conf import settings
+from django.contrib.admin.views.decorators import staff_member_required
 from django.core.paginator import Paginator
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404
 from django.shortcuts import render
 from django.templatetags.static import static
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.views.generic.detail import DetailView
 from django.views.generic.list import ListView
 from haystack.views import SearchView
@@ -20,6 +23,7 @@ from comments.forms import CommentForm
 from djangoblog.plugin_manage import hooks
 from djangoblog.plugin_manage.hook_constants import ARTICLE_CONTENT_HOOK_NAME
 from djangoblog.utils import cache, get_blog_setting, get_sha256
+from djangoblog.constants import CacheTimeout
 from djangoblog.mixins import (
     SlugCachedMixin,
     ArticleListMixin,
@@ -50,9 +54,6 @@ class ArticleListView(CachedListViewMixin, PageNumberMixin, ListView):
     paginate_by = settings.PAGINATE_BY
     page_kwarg = 'page'
     link_type = LinkShowType.L
-
-    def get_view_cache_key(self):
-        return self.request.get['pages']
 
     def get_context_data(self, **kwargs):
         kwargs['linktype'] = self.link_type
@@ -157,11 +158,16 @@ class ArticleDetailView(DetailView):
         from django.utils.text import Truncator
         from djangoblog.utils import CommonMarkdown
         
-        # 处理description：markdown -> HTML -> 纯文本，彻底去除格式
-        html_content = CommonMarkdown.get_markdown(article.body)
-        description = strip_tags(html_content)
-        description = ' '.join(description.split())  # 规范化空白字符
-        description = Truncator(description).chars(150, truncate='...')
+        # wjq：SEO 描述按文章缓存，避免每次请求重复渲染 Markdown；Article.save 时失效
+        seo_desc_key = f'article_seo_desc_{article.pk}'
+        description = cache.get(seo_desc_key)
+        if description is None:
+            # 处理description：markdown -> HTML -> 纯文本，彻底去除格式
+            html_content = CommonMarkdown.get_markdown(article.body)
+            description = strip_tags(html_content)
+            description = ' '.join(description.split())  # 规范化空白字符
+            description = Truncator(description).chars(150, truncate='...')
+            cache.set(seo_desc_key, description, CacheTimeout.HOUR_10)
         
         # 处理keywords：去除空格，用逗号分隔
         tags = [tag.name.strip() for tag in article.tags.all()]
@@ -210,10 +216,8 @@ class CategoryDetailView(SlugCachedMixin, OptimizedArticleQueryMixin, ArticleLis
         category = self.get_slug_object()
         categoryname = category.name
 
-        try:
-            categoryname = categoryname.split('/')[-1]
-        except BaseException:
-            pass
+        # wjq：名称可能为空，直接安全截取最后一段；不再用 except BaseException 吞掉所有异常
+        categoryname = (categoryname or '').split('/')[-1]
 
         kwargs['page_type'] = CategoryDetailView.page_type
         kwargs['tag_name'] = categoryname
@@ -363,7 +367,26 @@ class EsSearchView(SearchView):
         return context
 
 
-# wjq：图床上传接口；凭 sign(=sha256(sha256(SECRET_KEY))) 校验、无登录（见整改任务 B-2）
+# wjq：上传白名单与大小上限；只允许已知后缀写入静态目录
+UPLOAD_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}
+UPLOAD_FILE_EXTENSIONS = {
+    '.pdf', '.zip', '.7z', '.rar', '.txt', '.md',
+    '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+}
+UPLOAD_MAX_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+def _upload_authorized(request):
+    """wjq：上传鉴权——后台登录用户，或携带 sign 的外部工具调用端"""
+    if request.user.is_authenticated and request.user.is_staff:
+        return True
+    sign = request.GET.get('sign')
+    if not sign:
+        return False
+    return constant_time_compare(sign, get_sha256(get_sha256(settings.SECRET_KEY)))
+
+
+# wjq：图床上传接口；staff 登录或 sign 鉴权，后缀白名单 + 大小上限 + 精确后缀判定
 @csrf_exempt
 def fileupload(request):
     """
@@ -371,37 +394,48 @@ def fileupload(request):
     :param request:
     :return:
     """
-    if request.method == 'POST':
-        sign = request.GET.get('sign', None)
-        if not sign:
-            return HttpResponseForbidden()
-        if not sign == get_sha256(get_sha256(settings.SECRET_KEY)):
-            return HttpResponseForbidden()
-        response = []
-        for filename in request.FILES:
-            timestr = timezone.now().strftime('%Y/%m/%d')
-            imgextensions = ['jpg', 'png', 'jpeg', 'bmp']
-            fname = u''.join(str(filename))
-            isimage = len([i for i in imgextensions if fname.find(i) >= 0]) > 0
-            base_dir = os.path.join(settings.STATICFILES, "files" if not isimage else "image", timestr)
-            if not os.path.exists(base_dir):
-                os.makedirs(base_dir)
-            savepath = os.path.normpath(os.path.join(base_dir, f"{uuid.uuid4().hex}{os.path.splitext(filename)[-1]}"))
-            if not savepath.startswith(base_dir):
-                return HttpResponse("only for post")
-            with open(savepath, 'wb+') as wfile:
-                for chunk in request.FILES[filename].chunks():
-                    wfile.write(chunk)
-            if isimage:
-                from PIL import Image
-                image = Image.open(savepath)
-                image.save(savepath, quality=20, optimize=True)
-            url = static(savepath)
-            response.append(url)
-        return HttpResponse(response)
+    if request.method != 'POST':
+        return HttpResponseForbidden("only for post")
+    if not _upload_authorized(request):
+        return HttpResponseForbidden()
 
-    else:
-        return HttpResponse("only for post")
+    response = []
+    for filename in request.FILES:
+        upload = request.FILES[filename]
+        # wjq：空文件与超大文件直接拒绝，避免磁盘被灌满
+        if not upload.size:
+            return HttpResponseForbidden("empty file")
+        if upload.size > UPLOAD_MAX_SIZE:
+            return HttpResponseForbidden("file too large")
+
+        # wjq：按后缀精确匹配白名单，替代原来 find() 子串包含（"x.jpg.php" 会被误判为图片）
+        ext = os.path.splitext(str(filename))[1].lower()
+        is_image = ext in UPLOAD_IMAGE_EXTENSIONS
+        if not is_image and ext not in UPLOAD_FILE_EXTENSIONS:
+            return HttpResponseForbidden("unsupported file type")
+
+        timestr = timezone.now().strftime('%Y/%m/%d')
+        base_dir = os.path.join(settings.STATICFILES, "image" if is_image else "files", timestr)
+        os.makedirs(base_dir, exist_ok=True)
+        savepath = os.path.normpath(os.path.join(base_dir, f"{uuid.uuid4().hex}{ext}"))
+        if not savepath.startswith(os.path.normpath(base_dir) + os.sep):
+            return HttpResponseForbidden("invalid path")
+
+        with open(savepath, 'wb+') as wfile:
+            for chunk in upload.chunks():
+                wfile.write(chunk)
+        if is_image:
+            # wjq：后缀合法但内容不是真图片时，清理已落盘文件并返回 403，避免读图异常变 500 与垃圾文件残留
+            from PIL import Image
+            try:
+                with Image.open(savepath) as image:
+                    image.save(savepath, quality=20, optimize=True)
+            except (OSError, ValueError, Image.DecompressionBombError):
+                if os.path.exists(savepath):
+                    os.remove(savepath)
+                return HttpResponseForbidden("invalid image")
+        response.append(static(savepath))
+    return HttpResponse(response)
 
 
 # ===== 错误处理视图 =====
@@ -416,7 +450,9 @@ from djangoblog.error_views import (
 )
 
 
+# wjq：清空全站缓存的运维接口；仅 staff 可调用且必须 POST，防止匿名/GET 触发缓存穿透
+@staff_member_required
+@require_POST
 def clean_cache_view(request):
-    # wjq：清空全站缓存的运维接口；当前无鉴权（见整改任务 B-1）
     cache.clear()
     return HttpResponse('ok')

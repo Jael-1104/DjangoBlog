@@ -159,28 +159,71 @@ class ArticleTest(TestCase):
                 response = self.client.get(s['next_url'])
                 self.assertEqual(response.status_code, 200)
 
+    @staticmethod
+    def get_uploaded_image_files():
+        """wjq：列出上传目录下的所有文件，供测试前后做差集与清理"""
+        image_dir = os.path.join(settings.STATICFILES, 'image')
+        return {
+            os.path.join(root, name)
+            for root, _, files in os.walk(image_dir)
+            for name in files
+        }
+
     def test_image(self):
-        import requests
-        rsp = requests.get(
-            'https://www.python.org/static/img/python-logo.png')
+        # wjq：本地生成测试图，去掉对 www.python.org 的外网依赖（断网/SSL 抖动会直接挂掉整个 suite）
+        from PIL import Image
         imagepath = os.path.join(settings.BASE_DIR, 'python.png')
-        with open(imagepath, 'wb') as file:
-            file.write(rsp.content)
-        rsp = self.client.post('/upload')
-        self.assertEqual(rsp.status_code, 403)
-        sign = get_sha256(get_sha256(settings.SECRET_KEY))
-        with open(imagepath, 'rb') as file:
-            imgfile = SimpleUploadedFile(
-                'python.png', file.read(), content_type='image/jpg')
-            form_data = {'python.png': imgfile}
+        Image.new('RGB', (16, 16), (255, 0, 0)).save(imagepath, format='PNG')
+        before = self.get_uploaded_image_files()
+        try:
+            rsp = self.client.post('/upload')
+            self.assertEqual(rsp.status_code, 403)
+
+            sign = get_sha256(get_sha256(settings.SECRET_KEY))
+            with open(imagepath, 'rb') as file:
+                imgfile = SimpleUploadedFile(
+                    'python.png', file.read(), content_type='image/png')
             rsp = self.client.post(
-                '/upload?sign=' + sign, form_data, follow=True)
+                '/upload?sign=' + sign, {'python.png': imgfile}, follow=True)
             self.assertEqual(rsp.status_code, 200)
-        os.remove(imagepath)
+        finally:
+            # 删掉源文件与本次上传落盘的文件，避免污染工作区
+            if os.path.exists(imagepath):
+                os.remove(imagepath)
+            for path in self.get_uploaded_image_files() - before:
+                os.remove(path)
+
+        from unittest import mock
         from djangoblog.utils import save_user_avatar, send_email
-        send_email(['qq@qq.com'], 'testTitle', 'testContent')
-        save_user_avatar(
-            'https://www.python.org/static/img/python-logo.png')
+        # wjq：mock 掉外网头像下载，断网时也不会阻塞 2 秒
+        with mock.patch('djangoblog.utils.requests.get') as mock_get:
+            mock_get.return_value.status_code = 404
+            self.assertIsNone(save_user_avatar('https://example.com/avatar.png'))
+        # wjq：mock 掉 SMTP 发送，避免真实连接 smtp.mxhichina.com
+        with mock.patch('django.core.mail.EmailMultiAlternatives.send', return_value=1):
+            send_email(['qq@qq.com'], 'testTitle', 'testContent')
+
+    def test_image_invalid_content(self):
+        """wjq：后缀合法但内容不是图片时返回 403，且不留下垃圾文件"""
+        sign = get_sha256(get_sha256(settings.SECRET_KEY))
+        before = self.get_uploaded_image_files()
+
+        fake = SimpleUploadedFile(
+            'fake.png', b'this is not an image', content_type='image/png')
+        rsp = self.client.post('/upload?sign=' + sign, {'fake.png': fake})
+
+        self.assertEqual(rsp.status_code, 403)
+        self.assertIn('invalid image', rsp.content.decode())
+        self.assertEqual(before, self.get_uploaded_image_files())
+
+    def test_upload_rejects_bad_extension(self):
+        """wjq：非白名单后缀一律拒绝，防止写入可执行脚本"""
+        sign = get_sha256(get_sha256(settings.SECRET_KEY))
+        for name in ('shell.php', 'shell.jsp', 'shell.sh', 'shell.jpg.php'):
+            payload = SimpleUploadedFile(name, b'<?php echo 1;')
+            rsp = self.client.post('/upload?sign=' + sign, {name: payload})
+            self.assertEqual(rsp.status_code, 403, msg=f'{name} should be rejected')
+            self.assertIn('unsupported file type', rsp.content.decode())
 
     def test_errorpage(self):
         rsp = self.client.get('/eee')
